@@ -1,29 +1,29 @@
 import logging
 import time
 
-import aiogram.utils.markdown as md
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ParseMode, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils import executor
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.utils.markdown import text as md_text
 import keyboards
 from sqlite import db_start, send_customer, send_deliver, remove_deliver, remove_customer, send_orders, add_orders, \
     add_customer, add_deliver, get_cus, get_del_id, get_cus_id, select, upd_orders
 
 logging.basicConfig(level=logging.INFO)
 
-API_TOKEN = '5896227879:AAGieMnU1QLKKP5mgzwYjpu7OSYcRYGO64E'
+API_TOKEN = '7659984232:AAHIns96tmUjShalBUfZTIgAt_4XZM3ZZiA'
 
 
-async def on_startup(_):
+async def on_startup():
     await db_start()
 
 
-bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(storage=storage)
 
 global order_id
 
@@ -66,14 +66,13 @@ class Form(StatesGroup):
     order = State()
 
 
-@dp.message_handler(commands=['admin'])
+@dp.message(Command('admin'))
 async def auth_admin(message: types.Message):
     await Form.auth.set()
-
     await bot.send_message(message.chat.id, "Введите пароль")
 
 
-@dp.message_handler(state=Form.auth)
+@dp.message(F.state == Form.auth)
 async def auth_admin(message: types.Message, state: FSMContext):
     if message.text == "1":
         async with state.proxy() as data:
@@ -90,7 +89,7 @@ async def auth_admin(message: types.Message, state: FSMContext):
                                reply_markup=keyboards.start)
 
 
-@dp.message_handler(state=Form.acc)
+@dp.message(F.state == Form.acc)
 async def auth_admin(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['acc'] = message.text
@@ -111,13 +110,13 @@ async def auth_admin(message: types.Message, state: FSMContext):
 
     elif message.text == "Выход":
         await state.finish()
-        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+        await message.reply("Возвращайтесь", reply_markup=keyboards.markup_admin)
 
     else:
         await bot.send_message(message.chat.id, "блин", reply_markup=keyboards.markup_admin)
 
 
-@dp.message_handler(state=Form.back)
+@dp.message(F.state == Form.back)
 async def back_admin(message: types.Message):
     if message.text == "Удалить запись":
         await bot.send_message(message.chat.id, f"Для того, что бы удалить запись укажите user_id: ")
@@ -130,7 +129,7 @@ async def back_admin(message: types.Message):
         await bot.send_message(message.chat.id, "блин", reply_markup=keyboards.markup_admin)
 
 
-@dp.message_handler(state=Form.order)
+@dp.message(F.state == Form.order)
 async def order_admin(message: types.Message):
     if message.text == "Посмотреть заказы":
         await bot.send_message(message.chat.id, f"Заказы: ")
@@ -153,7 +152,7 @@ async def order_admin(message: types.Message):
         await bot.send_message(message.chat.id, "блин", reply_markup=keyboards.markup_admin)
 
 
-@dp.message_handler(state=Form.customer_id)
+@dp.message(F.state == Form.customer_id)
 async def create_order_customer_id(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['customer_id'] = message.text
@@ -168,7 +167,7 @@ async def create_order_customer_id(message: types.Message, state: FSMContext):
         await Form.acc.set()
 
 
-@dp.message_handler(state=Form.deliver_id)
+@dp.message(F.state == Form.deliver_id)
 async def create_order(message: types.Message, state: FSMContext):
     if message.text == "Назад":
         await bot.send_message(message.chat.id, "Выберите действие", reply_markup=keyboards.markup_admin)
@@ -181,7 +180,7 @@ async def create_order(message: types.Message, state: FSMContext):
         await Form.acc.set()
 
 
-@dp.message_handler(state=Form.remove)
+@dp.message(F.state == Form.remove)
 async def back_admin(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if message.text == "Назад":
@@ -199,14 +198,14 @@ async def back_admin(message: types.Message, state: FSMContext):
             await Form.acc.set()
 
 
-@dp.callback_query_handler()
+@dp.callback_query()
 async def process_callback_kb1btn1(callback_query: types.CallbackQuery):
     code = callback_query.data[-1]
     print(f"callback code={code}")
     await bot.send_message(callback_query.from_user.id, f'Нажата инлайн кнопка! code={code}')
 
 
-@dp.message_handler(commands=["geo"])
+@dp.message(Command("geo"))
 async def geo(message):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
@@ -215,7 +214,7 @@ async def geo(message):
                            reply_markup=keyboard)
 
 
-@dp.message_handler(content_types=["location"])
+@dp.message(F.content_type.in_({"location"}))
 async def location(message):
     if message.location is not None:
         await bot.send_location(message.chat.id, message.location.latitude, message.location.longitude)
@@ -223,7 +222,7 @@ async def location(message):
         await bot.send_location(cus_id, message.location.latitude, message.location.longitude)
 
 
-@dp.message_handler(commands=["apps"])
+@dp.message(Command("apps"))
 async def apps(message):
     await bot.send_message(message.chat.id, "Напишите приложения для аренды машины каршеринга, "
                                             "к которым вы имеете доступ.")
@@ -231,7 +230,7 @@ async def apps(message):
     await Form.car_apps.set()
 
 
-@dp.message_handler(state=Form.car_apps)
+@dp.message(F.state == Form.car_apps)
 async def add_car_apps(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['car_apps'] = message.text
@@ -239,7 +238,7 @@ async def add_car_apps(message: types.Message, state: FSMContext):
                                reply_markup=keyboards.start)
 
 
-@dp.message_handler(commands='help')
+@dp.message(Command("help"))
 async def cmd_help(message: types.Message):
     await bot.send_message(message.chat.id, "Эта инструкция поможет разобраться с использованием данного бота,\n"
                                             "для начала работы с ботом введите /start, \n"
@@ -254,239 +253,259 @@ async def cmd_help(message: types.Message):
                            reply_markup=keyboards.start)
 
 
-@dp.message_handler(commands='хуй')
+@dp.message(Command("help"))
 async def cmd_help(message: types.Message):
-    await bot.send_message(message.chat.id, "Сам хуй", reply_markup=keyboards.start)
+    await bot.send_message(message.chat.id, "В разработке", reply_markup=keyboards.start)
 
 
-@dp.message_handler(commands='start')
-async def cmd_start(message: types.Message):
-    """
-    Conversation's entry point
-    """
-
-    # Set state
-    await Form.role.set()
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(Form.role)
 
     user_id = message.from_user.id
     user_full_name = message.from_user.full_name
     user_name = message.from_user.first_name
     logging.info(f'{user_id=} {user_full_name=} {time.asctime()}')
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("Заказать")
-    item2 = types.KeyboardButton("Доставить")
-    markup.add(item1, item2)
+    markup = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Заказать"), KeyboardButton(text="Доставить")]
+        ],
+        resize_keyboard=True
+    )
 
-    await bot.send_message(message.chat.id, f"Привет, {user_name}! Этот бот разработан в рамках мерояприятия 'Я в деле'"
-                                            f" командой deceda.", reply_markup=markup)
+    await message.answer(
+        f"Привет, {user_name}! Этот бот разработан в рамках дисциплины Создание Технологического Бизнеса",
+        reply_markup=markup
+    )
 
 
-@dp.message_handler(state=Form.role)
+@dp.message(Form.role, F.text.in_({"Заказать", "Доставить", "Выход"}))
 async def process_role(message: types.Message, state: FSMContext):
-    """
-    Process user role
-    """
+    if message.text == "Доставить":
+        await state.update_data(role="deliver")
+        await state.set_state(Form.car_app)
 
-    async with state.proxy() as data:
-        markup = types.ReplyKeyboardRemove()
-        if message.text == "Доставить":
-            data['role'] = "deliver"
-            await Form.car_app.set()
-
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            item1 = types.KeyboardButton("Яндекс Драйв")
-            item2 = types.KeyboardButton("Делимобиль")
-            item3 = types.KeyboardButton("Ситидрайв")
-            item4 = types.KeyboardButton("BelkaCar")
-            markup.add(item1, item2)
-            markup.add(item3, item4)
-
-            await bot.send_message(message.chat.id, "Какое приложение для каршеринга вы используете?",
-                                   reply_markup=markup)
-        elif message.text == "Заказать":
-            data['role'] = "customer"
-            await Form.adr_to.set()
-            await bot.send_message(message.chat.id, "Укажите адрес", reply_markup=markup)
-
-        elif message.text == "Выход" or message.text == "/stop":
-            await state.finish()
-            await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-
-
-@dp.message_handler(state=Form.adr_to)
-async def process_adr_to(message: types.Message, state: FSMContext):
-    """
-    Process user role
-    """
-    if message.text == "Выход" or message.text == "/stop":
-        await state.finish()
-        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-    else:
-        async with state.proxy() as data:
-            data['adr_to'] = message.text
-        await Form.timing.set()
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        item1 = types.KeyboardButton("В течение 15 минут")
-        item2 = types.KeyboardButton("В течение 30 минут")
-        item3 = types.KeyboardButton("В течение часа")
-        markup.add(item1, item2, item3)
-        await bot.send_message(message.chat.id, "Время доставки?", reply_markup=markup)
-
-
-@dp.message_handler(state=Form.car_app)
-async def process_car(message: types.Message, state: FSMContext):
-    # Update state and data
-    if message.text == "Выход" or message.text == "/stop":
-        await state.finish()
-        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-    else:
-        markup = types.ReplyKeyboardRemove()
-        await state.update_data(car_app=str(message.text))
-        await Form.car_mark.set()
-        await bot.send_message(message.chat.id, "Укажите модель и номер машины?", reply_markup=markup)
-
-
-@dp.message_handler(state=Form.car_mark)
-async def process_car(message: types.Message, state: FSMContext):
-    # Update state and data
-    if message.text == "Выход" or message.text == "/stop":
-        await state.finish()
-        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-    else:
-        await state.update_data(car_mark=str(message.text))
-        await Form.remoteness.set()
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        item1 = types.KeyboardButton("Заказы рядом")
-        item2 = types.KeyboardButton("Заказы по адресу")
-        markup.add(item1, item2)
-        await bot.send_message(message.chat.id, f"Машина {message.text}", reply_markup=markup)
-
-
-@dp.message_handler(state=Form.timing)
-async def process_timing(message: types.Message, state: FSMContext):
-    # Update state and data
-    if message.text == "Выход" or message.text == "/stop":
-        await state.finish()
-        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-    else:
-        await state.update_data(timing=str(message.text))
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        item1 = types.KeyboardButton("3 км- 49₽")
-        item2 = types.KeyboardButton("2 км- 99₽")
-        item3 = types.KeyboardButton("1 км- 149₽")
-        item4 = types.KeyboardButton("Точно по адресу- 249₽")
-        markup.add(item1, item2, item3, item4)
-        await bot.send_message(message.chat.id, "В каком радиусе доставить?", reply_markup=markup)
-        await Form.radius.set()
-
-
-@dp.message_handler(state=Form.remoteness)
-async def process_remoteness(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        if message.text == "Заказы рядом":
-            data['remoteness'] = "nearby"
-            await Form.adr.set()
-            await bot.send_message(message.chat.id, "Отправте геопозицию или укажите адрес",
-                                   reply_markup=keyboards.markup_request)
-        elif message.text == "Заказы по адресу":
-            data['remoteness'] = "at"
-            await Form.adr.set()
-            await bot.send_message(message.chat.id, "Укажите адрес")
-        elif message.text == "Выход" or message.text == "/stop":
-            await state.finish()
-            await message.reply("Возвращайтесь", reply_markup=keyboards.start)
-
-
-@dp.message_handler(state=Form.radius)
-async def process_radius(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['radius'] = message.text
-
-        # And send message
-        await bot.send_message(
-            message.chat.id,
-            md.text(
-                md.text('role: ', data['role']),
-                md.text('adr_to:', data['adr_to']),
-                md.text('timing:', data['timing']),
-                md.text('radius:', data['radius']),
-                sep='\n',
-            ),
-            reply_markup=keyboards.start,
-
+        markup = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Яндекс Драйв"), KeyboardButton(text="Делимобиль")],
+                [KeyboardButton(text="Ситидрайв"), KeyboardButton(text="BelkaCar")]
+            ],
+            resize_keyboard=True
         )
+
+        await message.answer("Какое приложение для каршеринга вы используете?", reply_markup=markup)
+
+    elif message.text == "Заказать":
+        await state.update_data(role="customer")
+        await state.set_state(Form.adr_to)
+        
+        markup = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Выход")]],
+            resize_keyboard=True
+        )
+        
+        await message.answer("Укажите адрес", reply_markup=markup)
+
+    elif message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+
+
+@dp.message(Form.car_app)
+async def process_car_app(message: types.Message, state: FSMContext):
+    if message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+    else:
+        await state.update_data(car_app=message.text)
+        await state.set_state(Form.car_mark)
+        markup = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="Выход")]],
+            resize_keyboard=True
+        )
+        await message.answer("Укажите модель и номер машины?", reply_markup=markup)
+
+
+@dp.message(Form.adr_to)
+async def process_adr_to(message: types.Message, state: FSMContext):
+    if message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+    else:
+        await state.update_data(adr_to=message.text)
+        await state.set_state(Form.timing)
+        markup = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="В течение 15 минут")],
+                [KeyboardButton(text="В течение 30 минут")],
+                [KeyboardButton(text="В течение часа")],
+                [KeyboardButton(text="Выход")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer("Время доставки?", reply_markup=markup)
+
+
+@dp.message(Form.car_mark)
+async def process_car(message: types.Message, state: FSMContext):
+    if message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+    else:
+        await state.update_data(car_mark=message.text)
+        await state.set_state(Form.remoteness)
+        markup = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Заказы рядом"), KeyboardButton(text="Заказы по адресу")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer(f"Машина {message.text}", reply_markup=markup)
+
+
+@dp.message(Form.timing)
+async def process_timing(message: types.Message, state: FSMContext):
+    if message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+    else:
+        await state.update_data(timing=message.text)
+        markup = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="3 км- 49₽")],
+                [KeyboardButton(text="2 км- 99₽")],
+                [KeyboardButton(text="1 км- 149₽")],
+                [KeyboardButton(text="Точно по адресу- 249₽")]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer("В каком радиусе доставить?", reply_markup=markup)
+        await state.set_state(Form.radius)
+
+
+@dp.message(Form.remoteness)
+async def process_remoteness(message: types.Message, state: FSMContext):
+    if message.text == "Заказы рядом":
+        await state.update_data(remoteness="nearby")
+        await state.set_state(Form.adr)
+        markup = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Отправить местоположение", request_location=True)]
+            ],
+            resize_keyboard=True
+        )
+        await message.answer("Отправьте геопозицию или укажите адрес", reply_markup=markup)
+    elif message.text == "Заказы по адресу":
+        await state.update_data(remoteness="at")
+        await state.set_state(Form.adr)
+        await message.answer("Укажите адрес")
+    elif message.text == "Выход":
+        await state.clear()
+        await message.reply("Возвращайтесь", reply_markup=keyboards.start)
+
+
+@dp.message(Form.radius)
+async def process_radius(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    await state.update_data(radius=message.text)
+    
+    await message.answer(
+        md_text(
+            md_text('role: ', data['role']),
+            md_text('adr_to:', data['adr_to']),
+            md_text('timing:', data['timing']),
+            md_text('radius:', message.text),
+            sep='\n',
+        ),
+        reply_markup=keyboards.start,
+    )
+    
     await add_customer(state, customer_id=message.date, user_id=message.from_user.id)
-    await bot.send_message(message.chat.id, "Идет поиск...")
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("3 км- 49₽")
-    item2 = types.KeyboardButton("2 км- 99₽")
-    item3 = types.KeyboardButton("1 км- 149₽")
-    item4 = types.KeyboardButton("Точно по адресу- 249₽")
-    markup.add(item1, item2, item3, item4)
-    await bot.send_message(message.chat.id, "Если поиск идет слишком долго- выберите радиус доставки заново",
-                           reply_markup=markup)
+    await message.answer("Идет поиск...")
+    markup = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="3 км- 49₽")],
+            [KeyboardButton(text="2 км- 99₽")],
+            [KeyboardButton(text="1 км- 149₽")],
+            [KeyboardButton(text="Точно по адресу- 249₽")]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer(
+        "Если поиск идет слишком долго- выберите радиус доставки заново",
+        reply_markup=markup
+    )
+    
     del_id = None
     while del_id is None:
         del_id = await get_del_id(message.chat.id)
-        print(del_id)
-    else:
-        print(del_id)
-        markup_request = ReplyKeyboardMarkup(resize_keyboard=True).add(
-            KeyboardButton('/Выполнен'), KeyboardButton('/Сорван'))
-        await bot.send_message(message.chat.id, f'Ваш заказ принят: \n '
-                                                f'Приложение каршеринга: {await select("car_app", "deliver", "user_id", del_id)}\n'
-                                                f'Машина {await select("car_mark", "deliver", "user_id", del_id)}',
-                               reply_markup=markup_request)
+    
+    markup_request = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="/Выполнен"), KeyboardButton(text="/Сорван")]],
+        resize_keyboard=True
+    )
+    await message.answer(
+        f'Ваш заказ принят: \n'
+        f'Приложение каршеринга: {await select("car_app", "deliver", "user_id", del_id)}\n'
+        f'Машина {await select("car_mark", "deliver", "user_id", del_id)}',
+        reply_markup=markup_request
+    )
+    await state.clear()
 
-        await state.finish()
 
-
-@dp.message_handler(content_types=["location", "text"], state=Form.adr)
+@dp.message(Form.adr)
 async def process_adr(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-
-        if message.location is not None:
-            data['adr'] = f"{message.location.latitude}, {message.location.longitude}"
-        else:
-            data['adr'] = message.text
-
-        data['latitude'] = "0"
-        data['longitude'] = "0"
-        # And send message
-        await bot.send_message(
-            message.chat.id,
-            md.text(
-                md.text('role: ', data['role']),
-                md.text('car app:', data['car_app']),
-                md.text('car mark:', data['car_mark']),
-                md.text('adr:', data['adr']),
-                sep='\n',
-            ),
-            reply_markup=keyboards.start,
-            parse_mode=ParseMode.MARKDOWN,
-        )
+    data = await state.get_data()
+    
+    if message.location is not None:
+        await state.update_data(adr=f"{message.location.latitude}, {message.location.longitude}")
+    else:
+        await state.update_data(adr=message.text)
+    
+    await state.update_data(latitude="0", longitude="0")
+    
+    await message.answer(
+        md_text(
+            md_text('role: ', data['role']),
+            md_text('car app:', data['car_app']),
+            md_text('car mark:', data['car_mark']),
+            md_text('adr:', message.text if message.location is None else f"{message.location.latitude}, {message.location.longitude}"),
+            sep='\n',
+        ),
+        reply_markup=keyboards.start,
+    )
+    
     await add_deliver(state, deliver_id=message.date, user_id=message.from_user.id)
-    await bot.send_message(message.chat.id, "Идет поиск...")
-    await bot.send_message(message.chat.id, "Если поиск идет слишком долго- отправте геолокацию или адрес заново",
-                           reply_markup=keyboards.markup_request)
+    await message.answer("Идет поиск...")
+    markup = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Отправить местоположение", request_location=True)]],
+        resize_keyboard=True
+    )
+    await message.answer(
+        "Если поиск идет слишком долго- отправьте геолокацию или адрес заново",
+        reply_markup=markup
+    )
+    
     cus_id = None
     while cus_id is None:
         cus_id = await get_cus_id(message.chat.id)
-    else:
-        print(cus_id)
-        markup_request = ReplyKeyboardMarkup(resize_keyboard=True).add(
-            KeyboardButton('Принять заявку'), KeyboardButton('Отклонить заявку'))
-        await bot.send_message(message.chat.id, f'В данном районе есть заказ: \n '
-                                                f'{await select("radius", "customer", "user_id", cus_id)}\n'
-                                                f'{await select("adr_to", "customer", "user_id", cus_id)}',
-                               reply_markup=markup_request)
-        await Form.agree.set()
+    
+    markup_request = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Принять заявку"), KeyboardButton(text="Отклонить заявку")]],
+        resize_keyboard=True
+    )
+    await message.answer(
+        f'В данном районе есть заказ: \n'
+        f'{await select("radius", "customer", "user_id", cus_id)}\n'
+        f'{await select("adr_to", "customer", "user_id", cus_id)}',
+        reply_markup=markup_request
+    )
+    await state.set_state(Form.agree)
 
-    # await state.finish()
 
-
-@dp.message_handler(content_types=["location", "text"], state=Form.agree)
+@dp.message(Form.agree)
 async def process_radius(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
 
@@ -503,7 +522,7 @@ async def process_radius(message: types.Message, state: FSMContext):
             await state.finish()
 
 
-@dp.message_handler(content_types=["location", "text"], state=Form.geo_agree)
+@dp.message(Form.geo_agree)
 async def process_radius(message: types.Message, state: FSMContext):
     markup_request = ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton('/Подъезжаю'))
     async with state.proxy() as data:
@@ -519,9 +538,7 @@ async def process_radius(message: types.Message, state: FSMContext):
                            reply_markup=markup_request)
 
 
-# agree = State()
-# search = State()
-@dp.message_handler(commands=["Подъезжаю"])
+@dp.message(Command("Подъезжаю"))
 async def process_radius(message: types.Message, state: FSMContext):
     await bot.send_message(await get_cus_id(message.chat.id), "Водитель подъезжает, включите автобронирование")
     markup_request = ReplyKeyboardMarkup(resize_keyboard=True).add(
@@ -530,10 +547,7 @@ async def process_radius(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-# в
-
-
-@dp.message_handler(commands=["Выполнен"])
+@dp.message(Command("Выполнен"))
 async def process_radius(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if data['role'] == "deliver":
@@ -549,7 +563,7 @@ async def process_radius(message: types.Message, state: FSMContext):
             await upd_orders("выполнен", "customer_id", message.chat.id)
 
 
-@dp.message_handler(commands=["Сорван"])
+@dp.message(Command("Сорван"))
 async def process_radius(message: types.Message, state: FSMContext):
     await bot.send_message(message.chat.id, "Жаль...(", reply_markup=keyboards.start)
     async with state.proxy() as data:
@@ -559,5 +573,51 @@ async def process_radius(message: types.Message, state: FSMContext):
             await upd_orders("сорван", "customer_id", message.chat.id)
 
 
+async def main():
+    bot = Bot(token=API_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
+    
+    # Register all handlers
+    dp.message.register(cmd_start, Command("start"))
+    dp.message.register(process_role, Form.role, F.text.in_({"Заказать", "Доставить", "Выход"}))
+    dp.message.register(process_car_app, Form.car_app)
+    dp.message.register(process_adr_to, Form.adr_to)
+    dp.message.register(process_car, Form.car_mark)
+    dp.message.register(process_timing, Form.timing)
+    dp.message.register(process_remoteness, Form.remoteness)
+    dp.message.register(process_radius, Form.radius)
+    dp.message.register(process_adr, Form.adr)
+    
+    # Register other handlers...
+    dp.message.register(auth_admin, Command('admin'))
+    dp.message.register(auth_admin, F.state == Form.auth)
+    dp.message.register(auth_admin, F.state == Form.acc)
+    dp.message.register(back_admin, F.state == Form.back)
+    dp.message.register(order_admin, F.state == Form.order)
+    dp.message.register(create_order_customer_id, F.state == Form.customer_id)
+    dp.message.register(create_order, F.state == Form.deliver_id)
+    dp.message.register(back_admin, F.state == Form.remove)
+    dp.message.register(geo, Command("geo"))
+    dp.message.register(location, F.content_type.in_({"location"}))
+    dp.message.register(apps, Command("apps"))
+    dp.message.register(add_car_apps, F.state == Form.car_apps)
+    dp.message.register(cmd_help, Command("help"))
+    dp.message.register(process_radius, F.state == Form.agree)
+    dp.message.register(process_radius, F.state == Form.geo_agree)
+    dp.message.register(process_radius, Command("Подъезжаю"))
+    dp.message.register(process_radius, Command("Выполнен"))
+    dp.message.register(process_radius, Command("Сорван"))
+    
+    # Register callback query handler separately
+    dp.callback_query.register(process_callback_kb1btn1)
+    
+    # Register startup handler
+    dp.startup.register(on_startup)
+    
+    # Start polling
+    await dp.start_polling(bot)
+
+
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    import asyncio
+    asyncio.run(main())
